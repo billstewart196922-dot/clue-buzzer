@@ -1,0 +1,642 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#070709">
+<title>Clue Buzzer</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Source+Sans+3:wght@400;600&display=swap">
+<style>
+/* Layout: one dark column, big controls, three answer rows with confidence bars, then the game log. Single dark theme by design (low-emission). */
+:root{
+  --bg:#070709;
+  --panel:#101014;
+  --line:#1e1e26;
+  --fg:#a9a59b;
+  --fg-dim:#6b685f;
+  --fg-bright:#d8d3c6;
+  --accent:#3a48c4;      /* desaturated board blue */
+  --accent-dim:#1d2566;
+  --gold:#b8942e;        /* daily-double gold, dimmed */
+  --good:#4f8a5a;
+  --warn:#a3652a;
+  --bad:#8a3b3b;
+  --display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+  --body:"Source Sans 3",system-ui,-apple-system,sans-serif;
+  color-scheme:dark;
+}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--body);font-size:16px;line-height:1.4;-webkit-text-size-adjust:100%}
+.wrap{max-width:640px;margin:0 auto;padding-block:env(safe-area-inset-top,0px) calc(env(safe-area-inset-bottom,0px) + 24px);padding-inline:16px;display:flex;flex-direction:column;gap:14px;min-height:100%;box-sizing:border-box}
+header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding-top:12px}
+h1{font-family:var(--display);font-weight:700;font-size:22px;letter-spacing:.08em;text-transform:uppercase;color:var(--fg-bright);margin:0}
+.mode{font-size:12px;color:var(--fg-dim);letter-spacing:.06em;text-transform:uppercase;text-align:right}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;-webkit-tap-highlight-color:transparent}
+button:focus-visible,textarea:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.big{display:flex;gap:10px}
+.listen{flex:1 1 0;min-width:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:20px 10px;border-radius:14px;background:var(--accent-dim);border:1px solid var(--accent);color:var(--fg-bright);font-family:var(--display);font-size:24px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;user-select:none}
+.listen .dot{width:12px;height:12px;border-radius:50%;background:var(--fg-dim);flex:none}
+.listen.on{background:#2a1414;border-color:var(--bad)}
+.listen.on .dot{background:#c74b4b;animation:pulse 1.2s ease-in-out infinite}
+.listen.free{background:#121a16;border-color:#2f4a36}
+.listen.free.on{background:#15291b;border-color:var(--good)}
+.listen.free.on .dot{background:#5fb46f;animation:pulse 1.2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+@media (prefers-reduced-motion:reduce){.listen.on .dot{animation:none}}
+.listen[disabled]{opacity:.35;cursor:default}
+.hear{font-size:13px;color:var(--fg-dim);min-height:18px;overflow-wrap:anywhere}
+.hear b{color:var(--fg);font-weight:600}
+.clue{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+.clue label{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-dim)}
+textarea{width:100%;box-sizing:border-box;min-height:64px;resize:vertical;background:transparent;border:0;color:var(--fg-bright);font:inherit;font-size:17px;line-height:1.35;padding:0}
+textarea::placeholder{color:var(--fg-dim)}
+.row{display:flex;gap:10px;flex-wrap:wrap}
+.btn{flex:1 1 120px;padding:12px 14px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--fg-bright);font-family:var(--display);font-size:18px;letter-spacing:.1em;text-transform:uppercase}
+.btn.primary{border-color:var(--gold);color:#e0c777}
+.btn.small{flex:0 0 auto;font-size:14px;padding:6px 10px}
+.btn[disabled]{opacity:.4}
+.status{min-height:20px;font-size:14px;color:var(--fg-dim);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.status.err{color:#c97a7a}
+.answers{display:flex;flex-direction:column;gap:10px}
+.ans{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:grid;grid-template-columns:1fr auto;gap:4px 12px;align-items:baseline}
+.ans.top{border-color:var(--gold)}
+.ans.hit{border-color:var(--good)}
+.ans .resp{font-family:var(--display);font-size:26px;font-weight:600;color:var(--fg-bright);line-height:1.1;min-width:0;overflow-wrap:anywhere}
+.ans.top .resp{color:#e6cf86}
+.ans.hit .resp{color:#9ed3a8}
+.ans .pct{font-family:var(--display);font-size:30px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--fg-bright)}
+.ans .note{grid-column:1/-1;font-size:14px;color:var(--fg-dim)}
+.bar{grid-column:1/-1;height:4px;background:var(--line);border-radius:2px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--accent);width:0;transition:width .4s ease}
+.ans.top .bar i{background:var(--gold)}
+.ans.hit .bar i{background:var(--good)}
+.cat{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-dim);display:flex;gap:10px;flex-wrap:wrap}
+.tag{display:inline-block;padding:1px 7px;border-radius:999px;border:1px solid var(--line);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--fg-dim)}
+.tag.good{border-color:var(--good);color:#9ed3a8}
+.tag.bad{border-color:var(--bad);color:#d39a9a}
+.tag.warn{border-color:var(--warn);color:#d6a66e}
+.sources{font-size:12px;color:var(--fg-dim);display:flex;flex-wrap:wrap;gap:6px 12px}
+.sources a{color:var(--fg-dim)}
+.log{border-top:1px solid var(--line);padding-top:12px;display:flex;flex-direction:column;gap:10px}
+.log h2{margin:0;font-family:var(--display);font-size:16px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--fg);display:flex;justify-content:space-between;align-items:center;gap:10px}
+.score{font-size:13px;color:var(--fg-dim);font-variant-numeric:tabular-nums}
+.score b{color:var(--fg-bright);font-weight:600}
+.entry{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:6px;cursor:pointer}
+.entry.cur{border-color:var(--accent)}
+.entry .q{font-size:13px;color:var(--fg-dim);overflow-wrap:anywhere}
+.entry .a{display:flex;justify-content:space-between;gap:10px;align-items:baseline;flex-wrap:wrap}
+.entry .a b{font-family:var(--display);font-size:20px;font-weight:600;color:var(--fg-bright);min-width:0;overflow-wrap:anywhere}
+.entry .tags{display:flex;gap:6px;flex-wrap:wrap}
+.entry input{font-size:14px;padding:6px 8px}
+.lessons{font-size:13px;color:var(--fg-dim);display:flex;flex-direction:column;gap:3px}
+details{border-top:1px solid var(--line);padding-top:10px}
+details.last{margin-top:auto}
+summary{cursor:pointer;color:var(--fg-dim);font-size:13px;letter-spacing:.08em;text-transform:uppercase;list-style:none}
+summary::-webkit-details-marker{display:none}
+.settings{display:grid;grid-template-columns:1fr;gap:12px;padding-top:12px;font-size:14px}
+.field{display:flex;flex-direction:column;gap:4px}
+.field span{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-dim)}
+input[type=password],input[type=text],input[type=number],select{width:100%;box-sizing:border-box;background:var(--panel);border:1px solid var(--line);border-radius:8px;color:var(--fg-bright);padding:9px 10px;font:inherit}
+.check{display:flex;align-items:center;gap:10px}
+.check input{width:18px;height:18px;accent-color:var(--accent)}
+.hint{color:var(--fg-dim);font-size:13px}
+.hint a{color:var(--fg)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Clue Buzzer</h1>
+    <div class="mode" id="modeLabel">starting</div>
+  </header>
+
+  <div class="big">
+    <button class="listen" id="listenBtn" type="button" disabled><span class="dot"></span><span id="listenText">Listen</span></button>
+    <button class="listen free" id="freeBtn" type="button" disabled><span class="dot"></span><span id="freeText">Free run</span></button>
+  </div>
+  <div class="hear" id="hear"></div>
+
+  <div class="clue">
+    <label for="clue">Clue</label>
+    <textarea id="clue" placeholder="Tap Listen while the host reads, or type the clue here. Free run keeps listening all night and grades itself from the revealed answers."></textarea>
+  </div>
+
+  <div class="row">
+    <button class="btn primary" id="answerBtn" type="button">Answer</button>
+    <button class="btn" id="clearBtn" type="button">Clear</button>
+  </div>
+
+  <div class="status" id="status"></div>
+
+  <div class="cat" id="cat" hidden></div>
+  <div class="answers" id="answers"></div>
+  <div class="sources" id="sources"></div>
+
+  <section class="log" id="logBox" hidden>
+    <h2><span>Game log</span><button class="btn small" id="newGameBtn" type="button">New game</button></h2>
+    <div class="score" id="score"></div>
+    <div class="lessons" id="lessons"></div>
+    <div id="entries" style="display:flex;flex-direction:column;gap:8px"></div>
+  </section>
+
+  <details class="last" id="settingsBox">
+    <summary>Settings</summary>
+    <div class="settings">
+      <div class="field" id="keyField">
+        <span>Anthropic API key</span>
+        <input type="password" id="apiKey" autocomplete="off" placeholder="sk-ant-...">
+        <div class="hint">Stored only in this browser. Get one at <a href="https://platform.claude.com/" target="_blank" rel="noopener">platform.claude.com</a>. Needed for live web search and Free run.</div>
+      </div>
+      <div class="field" id="modelField">
+        <span>Model for answers</span>
+        <select id="model">
+          <option value="claude-opus-5-5">Opus 5.5 (best)</option>
+          <option value="claude-sonnet-5-5">Sonnet 5.5 (fast)</option>
+          <option value="claude-haiku-5-5">Haiku 5.5 (fastest)</option>
+        </select>
+        <div class="hint">Free run classifies what it hears with Haiku 5.5 regardless.</div>
+      </div>
+      <label class="check" id="searchField"><input type="checkbox" id="useSearch" checked> Search the web when unsure</label>
+      <label class="check"><input type="checkbox" id="autoSubmit" checked> Single clue: answer automatically after the host stops talking</label>
+      <div class="field">
+        <span>Silence that ends an utterance (seconds)</span>
+        <input type="number" id="silence" min="0.5" max="6" step="0.5" value="1.5">
+      </div>
+      <div class="field" id="verifyField">
+        <span>Free run: re-check with extra searches when top confidence is below (%)</span>
+        <input type="number" id="verifyBelow" min="0" max="100" step="5" value="90">
+      </div>
+      <label class="check"><input type="checkbox" id="phrase" checked> Phrase responses as questions</label>
+      <div class="hint" id="micHint"></div>
+    </div>
+  </details>
+</div>
+
+<script>
+(() => {
+"use strict";
+const $ = id => document.getElementById(id);
+const el = {
+  mode:$("modeLabel"), listenBtn:$("listenBtn"), listenText:$("listenText"), freeBtn:$("freeBtn"), freeText:$("freeText"),
+  hear:$("hear"), clue:$("clue"), answerBtn:$("answerBtn"), clearBtn:$("clearBtn"), status:$("status"), cat:$("cat"),
+  answers:$("answers"), sources:$("sources"), logBox:$("logBox"), score:$("score"), lessons:$("lessons"), entries:$("entries"),
+  newGameBtn:$("newGameBtn"), apiKey:$("apiKey"), model:$("model"), useSearch:$("useSearch"), autoSubmit:$("autoSubmit"),
+  silence:$("silence"), verifyBelow:$("verifyBelow"), phrase:$("phrase"), micHint:$("micHint"), keyField:$("keyField"),
+  modelField:$("modelField"), searchField:$("searchField"), verifyField:$("verifyField"), settingsBox:$("settingsBox")
+};
+
+// ---------- settings and game memory (per-browser) ----------
+const store = {
+  get(k, d){ try{ const v = localStorage.getItem("cb."+k); return v === null ? d : JSON.parse(v); }catch{ return d; } },
+  set(k, v){ try{ localStorage.setItem("cb."+k, JSON.stringify(v)); }catch{} }
+};
+el.apiKey.value = store.get("apiKey","");
+el.model.value = store.get("model","claude-opus-5-5");
+el.useSearch.checked = store.get("useSearch",true);
+el.autoSubmit.checked = store.get("autoSubmit",true);
+el.silence.value = store.get("silence",1.5);
+el.verifyBelow.value = store.get("verifyBelow",90);
+el.phrase.checked = store.get("phrase",true);
+for (const [k,node,prop] of [["apiKey",el.apiKey,"value"],["model",el.model,"value"],["useSearch",el.useSearch,"checked"],["autoSubmit",el.autoSubmit,"checked"],["silence",el.silence,"value"],["verifyBelow",el.verifyBelow,"value"],["phrase",el.phrase,"checked"]]) {
+  node.addEventListener("change", () => store.set(k, node[prop]));
+}
+if (!el.apiKey.value) el.settingsBox.open = true;
+
+// game: entries are clues we answered; correct answers and lessons feed later prompts.
+let game = store.get("game", null);
+if (!game || !Array.isArray(game.entries)) game = { entries: [], lessons: [], nextId: 1 };
+let currentId = null;
+const saveGame = () => store.set("game", game);
+const entryById = id => game.entries.find(e => e.id === id);
+
+// ---------- mode: direct API (standalone page) or viewer's Claude account (artifact) ----------
+let sample = null;          // artifact runtime: ask Claude on the viewer's account (no web search, no mic)
+let modeReady;
+if (window.claude && typeof window.claude.use === "function") {
+  el.mode.textContent = "connecting";
+  modeReady = window.claude.use("sample").then(s => { sample = s; }).catch(() => {});
+} else {
+  modeReady = Promise.resolve();
+}
+modeReady.then(() => {
+  if (sample) {
+    el.mode.textContent = "Claude account · no web search";
+    el.keyField.hidden = true; el.modelField.hidden = true; el.searchField.hidden = true; el.verifyField.hidden = true;
+    el.micHint.textContent = "Opened inside claude.ai. Listen will try the microphone, but the claude.ai frame usually blocks it; the hosted version (see README) always has it, plus Free run and live web search. You can type the host's correct answer on each log entry so later clues use it.";
+    el.settingsBox.open = false;
+    el.freeBtn.hidden = true;
+    setupMic(true);
+  } else {
+    el.mode.textContent = "API · web search";
+    setupMic();
+  }
+  renderLog();
+});
+
+// ---------- speech recognition ----------
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec = null, listening = false, runMode = null /* "single" | "free" */, silenceTimer = null, restartGuard = 0, restartTimes = [];
+let consumed = 0, utterBuf = "", lastUtter = "";
+
+let inArtifact = false;
+function setupMic(artifact){
+  inArtifact = !!artifact;
+  if (!SR) {
+    el.micHint.textContent = "This browser has no speech recognition. Use Chrome (Android/desktop) or Safari (iOS 15+), served over https.";
+    el.listenBtn.hidden = true; el.freeBtn.hidden = true;
+    return;
+  }
+  el.listenBtn.disabled = false; el.freeBtn.disabled = false;
+  if (!artifact) el.micHint.textContent = "Listening uses the browser's speech recognizer. Keep the phone within a few feet of the speaker. Free run classifies every pause-separated utterance as a clue, a revealed answer, or chatter.";
+  el.listenBtn.addEventListener("click", () => listening ? stopListening(runMode === "single") : startListening("single"));
+  el.freeBtn.addEventListener("click", () => listening ? stopListening(false) : startListening("free"));
+}
+
+function silenceMs(){ return Math.max(500, Number(el.silence.value) * 1000 || 1500); }
+
+function startListening(mode){
+  if (listening) return;
+  if (mode === "free" && !el.apiKey.value.trim()) { el.settingsBox.open = true; setStatus("Free run needs an API key (Settings).", true); return; }
+  runMode = mode; listening = true; restartGuard = 0; restartTimes = [];
+  consumed = 0; utterBuf = ""; lastUtter = "";
+  paintButtons();
+  if (mode === "single") { el.clue.value = ""; clearAnswers(); setStatus("Listening…"); }
+  else { setStatus("Free run: listening for clues and answers."); el.hear.textContent = ""; }
+  startRecognizer();
+  keepAwake();
+}
+
+function startRecognizer(){
+  rec = new SR();
+  rec.lang = "en-US"; rec.continuous = true; rec.interimResults = true; rec.maxAlternatives = 1;
+  consumed = 0;
+  rec.onresult = ev => {
+    if (runMode === "single") {
+      let text = "";
+      for (let i = 0; i < ev.results.length; i++) text += ev.results[i][0].transcript + " ";
+      el.clue.value = text.replace(/\s+/g," ").trim();
+      armTimer(() => { if (listening && el.autoSubmit.checked && el.clue.value.trim().length > 12) stopListening(true); });
+    } else {
+      let interim = "";
+      for (let i = consumed; i < ev.results.length; i++) {
+        const t = ev.results[i][0].transcript;
+        if (ev.results[i].isFinal) { utterBuf += t + " "; consumed = i + 1; } else interim += t;
+      }
+      showHearing(utterBuf + interim);
+      if (utterBuf.length > 600) flushUtterance(); else armTimer(flushUtterance);
+    }
+  };
+  rec.onerror = ev => {
+    if (ev.error === "no-speech") return;
+    if (ev.error === "not-allowed" || ev.error === "service-not-allowed") {
+      setStatus(inArtifact ? "The claude.ai frame blocks the microphone. Open the hosted version of this page for listening." : "Microphone blocked. Allow mic access for this site and try again.", true);
+      stopListening(false);
+    } else if (ev.error !== "aborted") {
+      setStatus("Recognizer error: " + ev.error, true);
+    }
+  };
+  rec.onend = () => {
+    if (!listening) return;
+    if (runMode === "free") {
+      flushUtterance();
+      const now = Date.now(); restartTimes = restartTimes.filter(t => now - t < 10000); restartTimes.push(now);
+      if (restartTimes.length > 12) { setStatus("The recognizer keeps stopping. Free run paused.", true); stopListening(false); return; }
+      try { startRecognizer(); } catch {}
+    } else if (restartGuard++ < 20) { try { rec.start(); } catch {} }
+    else stopListening(true);
+  };
+  try { rec.start(); } catch (e) { setStatus(inArtifact ? "The claude.ai frame blocks the microphone. Open the hosted version of this page for listening." : "Could not start the microphone.", true); listening = false; paintButtons(); }
+}
+
+function stopListening(submit){
+  listening = false;
+  clearTimeout(silenceTimer);
+  if (rec) { rec.onend = null; try { rec.stop(); } catch {} }
+  if (runMode === "free") { flushUtterance(); el.hear.textContent = ""; setStatus("Free run stopped."); }
+  const wasSingle = runMode === "single"; runMode = null; paintButtons();
+  if (wasSingle) { if (submit && el.clue.value.trim()) ask(); else if (submit) setStatus("Heard nothing."); }
+}
+
+function armTimer(fn){ clearTimeout(silenceTimer); silenceTimer = setTimeout(fn, silenceMs()); }
+function showHearing(t){ t = t.replace(/\s+/g," ").trim(); el.hear.innerHTML = ""; if (!t) return; const b = document.createElement("b"); b.textContent = "Hearing: "; el.hear.append(b, t.slice(-160)); }
+function paintButtons(){
+  el.listenBtn.classList.toggle("on", listening && runMode === "single");
+  el.listenText.textContent = listening && runMode === "single" ? "Stop" : "Listen";
+  el.freeBtn.classList.toggle("on", listening && runMode === "free");
+  el.freeText.textContent = listening && runMode === "free" ? "Free run · on" : "Free run";
+  el.listenBtn.disabled = listening && runMode === "free";
+  el.freeBtn.disabled = listening && runMode === "single";
+}
+
+// ---------- free run: utterances -> classify -> clue / answer reveal / chatter ----------
+let classifyChain = Promise.resolve();
+function flushUtterance(){
+  clearTimeout(silenceTimer);
+  const text = utterBuf.replace(/\s+/g," ").trim();
+  utterBuf = "";
+  if (text.split(" ").length < 2) return;                       // one-word fragments are noise
+  const prev = lastUtter; lastUtter = text;
+  classifyChain = classifyChain.then(() => handleUtterance(text, prev)).catch(() => {});
+}
+
+async function handleUtterance(text, prev){
+  let c;
+  try { c = await classifyUtterance(text, prev); }
+  catch (e) { setStatus("Classifier: " + describeError(e), true); return; }
+  if (!c) return;
+  if (c.kind === "clue" && c.clue) {
+    answerClue(c.clue, { free: true });
+  } else if (c.kind === "continuation" && c.clue) {
+    const last = game.entries[game.entries.length - 1];
+    if (last && Date.now() - last.ts < 45000 && !last.correct) answerClue(c.clue, { free: true, entry: last });
+    else answerClue(c.clue, { free: true });
+  } else if (c.kind === "answer" && Array.isArray(c.answers)) {
+    let n = 0;
+    for (const a of c.answers) {
+      const e = entryById(Number(a.id));
+      if (!e || !a.correct) continue;
+      grade(e, String(a.correct), Number(a.matched_rank) || matchRank(e, String(a.correct)), a.lesson);
+      n++;
+    }
+    if (n) setStatus(`Graded ${n} clue${n > 1 ? "s" : ""} from the host's answers.`);
+  }
+}
+
+const CLASSIFY = `You are watching a live Jeopardy-style trivia night through a speech-to-text feed. Transcription errors are common; infer intent. Classify the LATEST utterance.
+
+Reply with ONLY a JSON object:
+{"kind":"clue"|"continuation"|"answer"|"other",
+ "clue":"<for clue/continuation: the full cleaned clue text (join with the previous utterance if it continues it)>",
+ "answers":[{"id":<pending clue id>,"correct":"<the correct answer as the host gave it>","matched_rank":<1-3 if it matches one of our guesses for that clue, else 0>,"lesson":"<optional, at most 20 words: what to do differently next time, or null>"}]}
+
+- "clue": the host is reading a new question or clue.
+- "continuation": the rest of the most recent pending clue, still being read.
+- "answer": the host is revealing correct answers. Match each to a pending clue by meaning (hosts may say "number 4 was..." or read a whole round at once). Treat our guess as matched if it is the same entity even when worded differently (Tesla vs Nikola Tesla).
+- "other": contestant guesses, banter, scores, instructions, music, anything else. When unsure between other and clue, choose other unless it clearly reads as a question or clue.`;
+
+async function classifyUtterance(text, prev){
+  const pending = game.entries.filter(e => !e.correct).slice(-12);
+  const ctx = pending.length
+    ? "Pending clues (id: clue → our guesses):\n" + pending.map(e => `${e.id}: "${e.clue.slice(0,140)}" → ${e.answers.map((a,i) => `#${i+1} ${a.answer}`).join(", ")}`).join("\n")
+    : "No pending clues yet.";
+  const user = `${ctx}\n\nPrevious utterance: "${prev || ""}"\nLatest utterance: "${text}"`;
+  const { msg } = await callApi({ model: "claude-haiku-5-5", max_tokens: 400, system: CLASSIFY, output_config: { effort: "low" }, messages: [{ role: "user", content: user }] });
+  return parseJson(textOf(msg));
+}
+
+// ---------- asking Claude ----------
+const SYSTEM = `You are an expert Jeopardy! player helping at a trivia night. The clue was captured by speech recognition and may contain transcription errors, so infer the intended wording. Answer fast.
+
+Reply with ONLY a JSON object, no prose, no code fence:
+{"category":"<your best guess of the category, 1-4 words>",
+ "answers":[{"answer":"<short answer>","response":"<the answer phrased as a Jeopardy question, e.g. Who is Ada Lovelace?>","confidence":<integer percent>,"note":"<at most 12 words on why>"}, ... exactly 3 items, best first]}
+
+Confidence values are your probability that each item is the correct response: integers, descending, summing to at most 100. If the clue is garbled or incomplete, say so in the note of the first answer and lower the confidences.`;
+const SEARCH_RULE = `\n\nYou have a web_search tool. Use it only when you are not confident (below about 85%) or the clue depends on recent events; at most 2 searches, since speed matters more than citations.`;
+const VERIFY_RULE = `\n\nThis is a verification pass: you already answered quickly and now have time. Use web_search (up to 4 searches) to confirm or correct the candidate answers, then return the same JSON with revised answers and confidences. Make the search queries specific: combine the clue's key terms with the game's theme and the host's answer style if known.`;
+
+function memoryContext(){
+  const graded = game.entries.filter(e => e.correct).slice(-14);
+  if (!graded.length && !game.lessons.length) return "";
+  let s = "\n\nThis game so far (clue → the host's correct answer, and how we did):\n";
+  for (const e of graded) {
+    const how = e.rank === 1 ? "we were right" : e.rank ? `we had it at #${e.rank}` : `we missed (we said ${e.answers[0]?.answer || "?"})`;
+    s += `- "${e.clue.slice(0,120)}" → ${e.correct} (${how})\n`;
+  }
+  if (game.lessons.length) s += "Lessons learned this game:\n" + game.lessons.slice(-8).map(l => "- " + l).join("\n") + "\n";
+  s += "Use this to infer the round's theme, the host's expected specificity (full names, years, titles), and to write better search queries.";
+  return s;
+}
+
+let inFlight = null;
+
+el.answerBtn.addEventListener("click", () => { if (listening && runMode === "single") stopListening(true); else ask(); });
+el.clearBtn.addEventListener("click", () => { if (inFlight) inFlight.abort(); el.clue.value = ""; clearAnswers(); setStatus(""); currentId = null; renderLog(); el.clue.focus(); });
+el.clue.addEventListener("keydown", ev => { if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); ask(); } });
+el.newGameBtn.addEventListener("click", () => { game = { entries: [], lessons: [], nextId: 1 }; currentId = null; saveGame(); clearAnswers(); renderLog(); setStatus("New game. Memory cleared."); });
+
+function ask(){
+  const clue = el.clue.value.trim();
+  if (!clue) { setStatus("No clue to answer."); return; }
+  if (inFlight) inFlight.abort();
+  answerClue(clue, {});
+}
+
+async function answerClue(clue, opts){
+  const ctl = new AbortController();
+  if (!opts.free) inFlight = ctl;
+  let entry = opts.entry;
+  if (entry) { entry.clue = clue; entry.ts = Date.now(); }
+  else { entry = { id: game.nextId++, clue, answers: [], category: "", correct: null, rank: null, verified: false, ts: Date.now() }; game.entries.push(entry); }
+  currentId = entry.id; saveGame();
+  el.clue.value = clue; clearAnswers(); el.answerBtn.disabled = true; renderLog();
+  const t0 = performance.now();
+  setStatus(sample ? "Thinking…" : (el.useSearch.checked ? "Searching…" : "Thinking…"));
+  try {
+    const result = sample ? await askViaViewer(clue, ctl.signal) : await askViaApi(clue, ctl.signal, false);
+    if (ctl.signal.aborted) return;
+    entry.answers = (result.answers || []).slice(0,3).map(normAnswer); entry.category = result.category || ""; entry.sources = result.sources || []; entry.model = result.model || "";
+    saveGame(); showEntry(entry);
+    const secs = ((performance.now() - t0) / 1000).toFixed(1);
+    setStatus(`${secs} s` + (result.searched ? " · searched the web" : "") + (result.model ? " · " + result.model : ""));
+    if (opts.free && !sample && el.useSearch.checked && (entry.answers[0]?.confidence ?? 0) < Number(el.verifyBelow.value)) verifyEntry(entry);
+  } catch (e) {
+    if (ctl.signal.aborted || e?.name === "AbortError" || e?.code === "cancelled") return;
+    setStatus(describeError(e), true);
+    if (!entry.answers.length) { game.entries = game.entries.filter(x => x !== entry); saveGame(); renderLog(); }
+  } finally {
+    if (inFlight === ctl) inFlight = null;
+    el.answerBtn.disabled = false;
+  }
+}
+
+async function verifyEntry(entry){
+  entry.verifying = true; renderLog();
+  if (currentId === entry.id) setStatus("Re-checking with extra searches…");
+  try {
+    const result = await askViaApi(entry.clue, null, true, entry.answers);
+    if (entry.correct) return;                                   // graded meanwhile; keep the record
+    const before = entry.answers[0]?.answer;
+    entry.answers = (result.answers || []).slice(0,3).map(normAnswer); entry.verified = true; entry.sources = result.sources || entry.sources;
+    saveGame();
+    if (currentId === entry.id) { showEntry(entry); setStatus("Verified" + (before && before !== entry.answers[0]?.answer ? ` · changed from ${before}` : " · unchanged")); }
+  } catch (e) {
+    if (currentId === entry.id) setStatus("Verification failed: " + describeError(e), true);
+  } finally { entry.verifying = false; renderLog(); }
+}
+
+async function askViaApi(clue, signal, verify, candidates){
+  const model = el.model.value;
+  const useSearch = el.useSearch.checked;
+  const body = {
+    model,
+    max_tokens: 1024,
+    system: SYSTEM + memoryContext() + (verify ? VERIFY_RULE : (useSearch ? SEARCH_RULE : "")),
+    output_config: { effort: verify ? "medium" : "low" },
+    messages: [{ role: "user", content: "Clue: " + clue + (verify && candidates?.length ? "\n\nOur quick answers were: " + candidates.map((a,i) => `#${i+1} ${a.answer} (${a.confidence}%)`).join(", ") : "") }]
+  };
+  if (useSearch || verify) body.tools = [{ type: "web_search_20260318", name: "web_search", max_uses: verify ? 4 : 2, allowed_callers: ["direct"] }];
+  const { msg, searched, sources } = await callApi(body, signal);
+  const parsed = parseJson(textOf(msg));
+  if (!parsed || !Array.isArray(parsed.answers)) throw new Error("Could not read the answer. Try again." + (msg.stop_reason === "max_tokens" ? " (cut short)" : ""));
+  return { ...parsed, searched, sources: dedupe(sources).slice(0, 4), model: shortModel(msg.model) };
+}
+
+async function callApi(body, signal){
+  const key = el.apiKey.value.trim();
+  if (!key) { el.settingsBox.open = true; throw new Error("Add your Anthropic API key in Settings."); }
+  const headers = {
+    "content-type": "application/json",
+    "x-api-key": key,
+    "anthropic-version": "2023-06-01",
+    "anthropic-dangerous-direct-browser-access": "true"
+  };
+  if (body.model !== "claude-haiku-5-5") { body.fallbacks = "default"; headers["anthropic-beta"] = "server-side-fallback-2026-07-01"; }
+  let msg, rounds = 0, searched = false, sources = [];
+  for (;;) {
+    const res = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers, body: JSON.stringify(body), signal: signal || undefined });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const m = data?.error?.message || res.statusText;
+      if (res.status === 401) throw new Error("API key rejected (401). Check it in Settings.");
+      if (res.status === 429) throw new Error("Rate limited. Wait a few seconds and try again.");
+      throw new Error(`API error ${res.status}: ${m}`);
+    }
+    msg = data;
+    for (const b of msg.content || []) {
+      if (b.type === "server_tool_use") searched = true;
+      if (b.type === "web_search_tool_result" && Array.isArray(b.content)) for (const r of b.content) if (r.url) sources.push({ url: r.url, title: r.title });
+    }
+    if (msg.stop_reason === "pause_turn" && rounds++ < 2) { body.messages = [...body.messages, { role: "assistant", content: msg.content }]; continue; }
+    break;
+  }
+  if (msg.stop_reason === "refusal") throw new Error("Claude declined this request.");
+  return { msg, searched, sources };
+}
+
+async function askViaViewer(clue, signal){
+  const parsed = await sample.json(SYSTEM + memoryContext() + "\n\nClue: " + clue, { modelTier: "quick", signal, cache: false });
+  if (!parsed || !Array.isArray(parsed.answers)) throw new Error("Could not read the answer. Try again.");
+  return { ...parsed, searched: false, sources: [] };
+}
+
+// ---------- grading and memory ----------
+const norm = s => String(s || "").toLowerCase().replace(/^(what|who|where|when|which)\s+(is|are|was|were)\s+/,"").replace(/^(the|a|an)\s+/,"").replace(/[^a-z0-9 ]+/g," ").replace(/\s+/g," ").trim();
+function matchRank(entry, correct){
+  const c = norm(correct); if (!c) return 0;
+  for (let i = 0; i < entry.answers.length; i++) {
+    const a = norm(entry.answers[i].answer);
+    if (!a) continue;
+    if (a === c || a.includes(c) || c.includes(a)) return i + 1;
+    const ta = new Set(a.split(" ").filter(w => w.length > 2)), tc = c.split(" ").filter(w => w.length > 2);
+    if (tc.length && tc.filter(w => ta.has(w)).length / tc.length >= 0.6) return i + 1;
+  }
+  return 0;
+}
+function grade(entry, correct, rank, lesson){
+  entry.correct = correct; entry.rank = rank || 0;
+  if (lesson && typeof lesson === "string" && lesson.length > 6 && !game.lessons.includes(lesson)) game.lessons = [...game.lessons, lesson].slice(-10);
+  else if (!rank && !lesson) game.lessons = [...game.lessons, `Missed "${entry.clue.slice(0,50)}": answer was ${correct}, not ${entry.answers[0]?.answer || "?"}.`].slice(-10);
+  saveGame();
+  if (currentId === entry.id) showEntry(entry);
+  renderLog();
+}
+
+// ---------- rendering ----------
+function normAnswer(a){ return { answer: String(a.answer || a.response || "").trim(), response: String(a.response || a.answer || "").trim(), confidence: Math.max(0, Math.min(100, Math.round(Number(a.confidence) || 0))), note: String(a.note || "") }; }
+
+function showEntry(e){
+  currentId = e.id;
+  el.clue.value = e.clue;
+  const tags = [];
+  if (e.category) tags.push(["Category guess · " + e.category, ""]);
+  if (e.verified) tags.push(["verified", "good"]);
+  if (e.correct) tags.push([e.rank === 1 ? "right" : e.rank ? "#" + e.rank + " was right" : "missed · " + e.correct, e.rank === 1 ? "good" : e.rank ? "warn" : "bad"]);
+  el.cat.hidden = !tags.length;
+  el.cat.replaceChildren(...tags.map(([t, cls]) => { const s = document.createElement("span"); s.className = cls ? "tag " + cls : ""; s.textContent = t; return s; }));
+  el.answers.replaceChildren(...e.answers.map((a, i) => {
+    const d = document.createElement("div"); d.className = "ans" + (i === 0 ? " top" : "") + (e.correct && e.rank === i + 1 ? " hit" : "");
+    const text = el.phrase.checked && a.response ? a.response : (a.answer || a.response);
+    d.innerHTML = `<div class="resp"></div><div class="pct"></div><div class="bar"><i></i></div><div class="note"></div>`;
+    d.querySelector(".resp").textContent = text;
+    d.querySelector(".pct").textContent = a.confidence + "%";
+    d.querySelector(".note").textContent = a.note;
+    requestAnimationFrame(() => { d.querySelector(".bar i").style.width = a.confidence + "%"; });
+    return d;
+  }));
+  el.sources.replaceChildren(...(e.sources || []).map(s => { const a = document.createElement("a"); a.href = s.url; a.target = "_blank"; a.rel = "noopener"; a.textContent = (s.title || s.url).slice(0, 48); return a; }));
+  renderLog();
+}
+
+function renderLog(){
+  const list = game.entries;
+  el.logBox.hidden = !list.length;
+  if (!list.length) return;
+  const graded = list.filter(e => e.correct), right = graded.filter(e => e.rank === 1).length, top3 = graded.filter(e => e.rank > 0).length;
+  el.score.innerHTML = "";
+  const parts = [`${list.length} clue${list.length !== 1 ? "s" : ""}`];
+  if (graded.length) parts.push(`right <b>${right}/${graded.length}</b>`, `in top 3 <b>${top3}/${graded.length}</b>`);
+  const pend = list.length - graded.length; if (pend) parts.push(`${pend} awaiting the host's answer`);
+  el.score.innerHTML = parts.join(" · ");
+  el.lessons.replaceChildren(...game.lessons.slice(-4).map(l => { const d = document.createElement("div"); d.textContent = "↳ " + l; return d; }));
+  el.entries.replaceChildren(...[...list].reverse().map(e => {
+    const d = document.createElement("div"); d.className = "entry" + (e.id === currentId ? " cur" : "");
+    const q = document.createElement("div"); q.className = "q"; q.textContent = `#${e.id} · ` + e.clue.slice(0, 110);
+    const a = document.createElement("div"); a.className = "a";
+    const b = document.createElement("b"); b.textContent = e.answers[0] ? e.answers[0].answer : "…";
+    const p = document.createElement("span"); p.textContent = e.answers[0] ? e.answers[0].confidence + "%" : "";
+    a.append(b, p);
+    const tags = document.createElement("div"); tags.className = "tags";
+    const tag = (t, cls) => { const s = document.createElement("span"); s.className = "tag " + (cls || ""); s.textContent = t; tags.append(s); };
+    if (e.verifying) tag("re-checking", "warn"); else if (e.verified) tag("verified", "good");
+    if (e.correct) tag(e.rank === 1 ? "right" : e.rank ? "#" + e.rank + " was right" : "missed", e.rank === 1 ? "good" : e.rank ? "warn" : "bad");
+    if (e.correct) { const c = document.createElement("span"); c.className = "tag"; c.textContent = "host: " + e.correct; tags.append(c); }
+    d.append(q, a, tags);
+    if (!e.correct) {
+      const inp = document.createElement("input"); inp.type = "text"; inp.id = "correct-" + e.id; inp.placeholder = "Type the host's correct answer and press Enter";
+      inp.addEventListener("click", ev => ev.stopPropagation());
+      inp.addEventListener("keydown", ev => { if (ev.key === "Enter" && inp.value.trim()) { ev.preventDefault(); grade(e, inp.value.trim(), matchRank(e, inp.value.trim())); } });
+      d.append(inp);
+    }
+    d.addEventListener("click", () => showEntry(e));
+    return d;
+  }));
+}
+
+function clearAnswers(){ el.answers.replaceChildren(); el.sources.replaceChildren(); el.cat.hidden = true; }
+function setStatus(t, err){ el.status.textContent = t; el.status.classList.toggle("err", !!err); }
+function textOf(msg){ return (msg?.content || []).filter(b => b.type === "text").map(b => b.text).join("\n"); }
+function parseJson(text){
+  if (!text) return null;
+  try { return JSON.parse(text); } catch {}
+  const a = text.indexOf("{"), z = text.lastIndexOf("}");
+  if (a < 0 || z <= a) return null;
+  try { return JSON.parse(text.slice(a, z + 1)); } catch { return null; }
+}
+function dedupe(list){ const seen = new Set(); return list.filter(s => !seen.has(s.url) && seen.add(s.url)); }
+function shortModel(id){ if (!id) return ""; const m = /claude-(\w+)-(\d+)-?(\d*)/.exec(id); return m ? m[1][0].toUpperCase() + m[1].slice(1) + " " + m[2] + (m[3] ? "." + m[3] : "") : id; }
+function describeError(e){
+  if (e && typeof e === "object" && "code" in e && !(e instanceof Error)) {
+    switch (e.code) {
+      case "not_granted": return "Claude access was not allowed for this page.";
+      case "rate_limited": return "Rate limited. Wait a moment and try again.";
+      case "invalid_json": return "Could not read the answer. Try again.";
+      case "refused": return "Claude declined this clue.";
+      default: return "Claude request failed (" + e.code + ").";
+    }
+  }
+  if (e instanceof TypeError) return "Network error. Check the connection (and that the page is served over https).";
+  return e?.message || String(e);
+}
+
+// ---------- wake lock ----------
+let wake = null;
+async function keepAwake(){
+  try { if (navigator.wakeLock && !wake) { wake = await navigator.wakeLock.request("screen"); wake.addEventListener("release", () => { wake = null; }); } } catch {}
+}
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && wake === null && (listening || el.clue.value)) keepAwake(); });
+})();
+</script>
+</body>
+</html>
